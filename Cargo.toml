@@ -1,0 +1,10 @@
+[package]
+name = "android-device-info-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[[bin]]
+name = "android-device-info-rs"
+path = "src/main.rs"
