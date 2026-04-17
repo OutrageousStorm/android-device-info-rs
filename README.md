@@ -1,23 +1,20 @@
 # 🦀 Android Device Info (Rust)
 
-Ultra-fast compiled CLI to gather Android device information. Single binary, zero external dependencies.
+Fast, minimal Rust CLI to grab Android device info via ADB.
 
-## Install
+## Build
+
 ```bash
-cargo install --git https://github.com/OutrageousStorm/android-device-info-rs
-# or download binary from releases
+cargo build --release
+# Binary: target/release/adi
 ```
 
 ## Usage
+
 ```bash
-android-device-info-rs --all          # full report
-android-device-info-rs --model        # just model
-android-device-info-rs --storage      # storage usage
-android-device-info-rs --json         # JSON output
+adi              # pretty output
+adi --json       # JSON output for scripting
+adi --filter api # filter by keyword (case-insensitive)
 ```
 
-## Why Rust?
-- ⚡ Blazing fast (compared to Python)
-- 📦 Single binary (no dependencies)
-- 🔒 Memory safe
-- 🎯 Perfect for scripting
+Output includes: model, brand, Android version, API level, security patch, CPU, RAM, storage, battery.
