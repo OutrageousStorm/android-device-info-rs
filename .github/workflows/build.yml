@@ -1,0 +1,39 @@
+name: Build Rust CLI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: adb-info
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: adb-info
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: adb-info.exe
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rust-lang/rust-toolchain@v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: adb-info-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
