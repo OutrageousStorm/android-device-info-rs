@@ -1,10 +1,16 @@
 [package]
-name = "android-device-info-rs"
+name = "android-device-info"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-
 [[bin]]
-name = "android-device-info-rs"
+name = "adi"
 path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+colored = "2.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+prettytable-rs = "0.11"
+regex = "1.10"
