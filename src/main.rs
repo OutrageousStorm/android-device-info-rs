@@ -1,138 +1,85 @@
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use colored::*;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
-fn adb(cmd: &str) -> String {
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(format!("adb shell {}", cmd))
+#[derive(Parser)]
+#[command(name = "adi", about = "Android Device Info — fast system info via ADB")]
+struct Cli {
+    #[arg(short, long)]
+    json: bool,
+    #[arg(short, long)]
+    filter: Option<String>,
+}
+
+fn adb_shell(cmd: &str) -> String {
+    let output = Command::new("adb")
+        .args(&["shell", cmd])
+        .stdout(Stdio::piped())
         .output()
-        .unwrap_or_default();
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+        .expect("Failed to run adb");
+    String::from_utf8_lossy(&output.stdout).to_string()
 }
 
 fn prop(key: &str) -> String {
-    adb(&format!("getprop {}", key))
+    adb_shell(&format!("getprop {}", key)).trim().to_string()
 }
 
-#[derive(Parser)]
-#[command(name = "adb-info")]
-#[command(about = "Fast Android device info tool")]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Full device report
-    Full,
-    /// Device model and build info
-    Device,
-    /// CPU architecture and performance
-    Cpu,
-    /// Memory and storage info
-    Memory,
-    /// Battery and power state
-    Battery,
-    /// Network interfaces and IPs
-    Network,
-    /// Security status (root, encryption, etc)
-    Security,
-    /// Check if device is rooted
-    IsRooted,
-    /// JSON output (all info as JSON)
-    Json,
-}
-
-fn print_device() {
-    println!("{}", "═ DEVICE ═".bold().cyan());
-    println!("  Model:       {}", prop("ro.product.model"));
-    println!("  Brand:       {}", prop("ro.product.brand"));
-    println!("  Hardware:    {}", prop("ro.hardware"));
-    println!("  Codename:    {}", prop("ro.product.device"));
-    println!("  Android:     {}", prop("ro.build.version.release"));
-    println!("  API:         {}", prop("ro.build.version.sdk"));
-    println!("  Build Type:  {}", prop("ro.build.type"));
-    println!("  Fingerprint: {}", prop("ro.build.fingerprint"));
-}
-
-fn print_cpu() {
-    println!("{}", "═ CPU ═".bold().yellow());
-    println!("  Architecture: {}", prop("ro.product.cpu.abi"));
-    println!("  Cores:        {}", adb("nproc"));
-    if let Ok(_) = Command::new("sh")
-        .arg("-c")
-        .arg("adb shell cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-        .output()
-    {
-        let freq_khz = adb("cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-            .parse::<u64>()
-            .unwrap_or(0);
-        println!("  Current Freq: {} MHz", freq_khz / 1000);
-    }
-}
-
-fn print_battery() {
-    println!("{}", "═ BATTERY ═".bold().green());
-    println!("  Level:       {}", adb("dumpsys battery | grep 'level'"));
-    println!("  Status:      {}", adb("dumpsys battery | grep 'status'"));
-    println!("  Health:      {}", adb("dumpsys battery | grep 'health'"));
-    println!("  Temp:        {}°C", 
-        adb("dumpsys battery | grep 'temperature'")
-            .split('=').nth(1).unwrap_or("?"));
-}
-
-fn check_root() -> bool {
-    !adb("which su").is_empty() || !adb("ls /sbin/su 2>/dev/null").is_empty()
+#[derive(serde::Serialize)]
+struct DeviceInfo {
+    model: String,
+    brand: String,
+    codename: String,
+    android_version: String,
+    api_level: String,
+    security_patch: String,
+    fingerprint: String,
+    build_type: String,
+    cpu_abi: String,
+    cpu_cores: String,
+    ram_total: String,
+    storage_internal: String,
+    battery_level: String,
+    battery_health: String,
 }
 
 fn main() {
     let cli = Cli::parse();
-    
-    match cli.command {
-        Commands::Full => {
-            print_device();
-            println!();
-            print_cpu();
-            println!();
-            print_battery();
-            println!();
-            println!("{}", "═ SECURITY ═".bold().red());
-            println!("  Root:       {}", if check_root() { "YES ⚠️ ".red() } else { "NO ✓".green() });
-            println!("  Encryption: {}", prop("ro.crypto.state"));
-            println!("  SELinux:    {}", adb("getenforce 2>/dev/null"));
-        }
-        Commands::Device => print_device(),
-        Commands::Cpu => print_cpu(),
-        Commands::Battery => print_battery(),
-        Commands::Memory => {
-            println!("{}", "═ MEMORY ═".bold().blue());
-            println!("  {}", adb("cat /proc/meminfo | head -4"));
-        }
-        Commands::Network => {
-            println!("{}", "═ NETWORK ═".bold().magenta());
-            println!("  {}", adb("ip addr show wlan0 | grep 'inet' | awk '{print $2}'"));
-        }
-        Commands::Security => {
-            println!("{}", "═ SECURITY ═".bold().red());
-            println!("  Root:       {}", if check_root() { "YES".red() } else { "NO".green() });
-            println!("  Bootloader: {}", prop("ro.boot.verifiedbootstate"));
-            println!("  Encryption: {}", prop("ro.crypto.state"));
-        }
-        Commands::IsRooted => {
-            println!("{}", if check_root() { "true" } else { "false" });
-        }
-        Commands::Json => {
-            let info = serde_json::json!({
-                "model": prop("ro.product.model"),
-                "android": prop("ro.build.version.release"),
-                "api": prop("ro.build.version.sdk"),
-                "rooted": check_root(),
-                "cpu": prop("ro.product.cpu.abi"),
-                "device": prop("ro.product.device"),
-            });
-            println!("{}", serde_json::to_string_pretty(&info).unwrap());
-        }
+
+    let device = DeviceInfo {
+        model: prop("ro.product.model"),
+        brand: prop("ro.product.brand"),
+        codename: prop("ro.product.device"),
+        android_version: prop("ro.build.version.release"),
+        api_level: prop("ro.build.version.sdk"),
+        security_patch: prop("ro.build.version.security_patch"),
+        fingerprint: prop("ro.build.fingerprint"),
+        build_type: prop("ro.build.type"),
+        cpu_abi: prop("ro.product.cpu.abi"),
+        cpu_cores: adb_shell("nproc").trim().to_string(),
+        ram_total: adb_shell("cat /proc/meminfo | grep MemTotal").trim().to_string(),
+        storage_internal: adb_shell("df -h /data | tail -1").trim().to_string(),
+        battery_level: adb_shell("dumpsys battery | grep level").trim().to_string(),
+        battery_health: adb_shell("dumpsys battery | grep health").trim().to_string(),
+    };
+
+    if cli.json {
+        println!("{}", serde_json::to_string_pretty(&device).unwrap());
+        return;
     }
+
+    println!("
+{}", "Device Information".bold().blue());
+    println!("{}", "─".repeat(50));
+    println!("  {} {}", "Model:".cyan(), device.model.white());
+    println!("  {} {}", "Brand:".cyan(), device.brand.white());
+    println!("  {} {}", "Device:".cyan(), device.codename.white());
+    println!("  {} {} (API {})", "Android:".cyan(), device.android_version.white(), device.api_level.white());
+    println!("  {} {}", "Security patch:".cyan(), device.security_patch.white());
+    println!("  {} {}", "Build type:".cyan(), device.build_type.white());
+    println!("  {} {}", "CPU:".cyan(), device.cpu_abi.white());
+    println!("  {} {} cores", "Cores:".cyan(), device.cpu_cores.white());
+    println!("  {} {}", "RAM:".cyan(), device.ram_total.white());
+    println!("  {} {}", "Storage:".cyan(), device.storage_internal.white());
+    println!("  {} {}", "Battery:".cyan(), device.battery_level.white());
+    println!();
 }
